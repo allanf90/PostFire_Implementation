@@ -26,6 +26,13 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Write env vars file
+        run: |
+          cat <<'EOF' > /tmp/envvars.yaml
+          GEE_SERVICE_ACCOUNT: "${{ secrets.GEE_SERVICE_ACCOUNT }}"
+          GEE_KEY_JSON: "${{ secrets.GEE_KEY_JSON }}"
+          EOF
+
       - name: Deploy to Cloud Run (from source)
         run: |
           gcloud run deploy $SERVICE \
@@ -38,8 +45,7 @@ jobs:
             --min-instances 0 \
             --max-instances 3 \
             --timeout 60s \
-            --set-env-vars "GEE_SERVICE_ACCOUNT=${{ secrets.GEE_SERVICE_ACCOUNT }}" \
-            --set-env-vars "GEE_KEY_JSON=${{ secrets.GEE_KEY_JSON }}"
+            --env-vars-file /tmp/envvars.yaml
 
       - name: Get service URL
         run: |
