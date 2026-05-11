@@ -43,29 +43,32 @@ def query_viirs(
     start   = (now_utc - timedelta(hours=hours_back)).strftime("%Y-%m-%dT%H:%M:%S")
     end     = now_utc.strftime("%Y-%m-%dT%H:%M:%S")
 
-    # ── Correct dataset ID ────────────────────────────────────────────────────
+    # ── Correct dataset ID (slashes not underscores) ──────────────────────────
     collection = (
-        ee.ImageCollection("NASA_LANCE_SNPP_VIIRS_C2")
+        ee.ImageCollection("NASA/LANCE/SNPP_VIIRS/C2")
         .filterDate(start, end)
         .filterBounds(aoi)
     )
 
     def image_to_points(image):
+        # confidence: 0=low, 1=nominal, 2=high — filter >= 1 for nominal+high
         confidence = image.select("confidence")
-        mask = confidence.gte(min_confidence)
+        mask = confidence.gte(1)
         masked = image.updateMask(mask)
         points = masked.sample(
             region=aoi,
             scale=375,
             geometries=True,
         )
-        acq_time = image.get("system:time_start")
-        return points.map(lambda f: f.set("acq_millis", acq_time))
+        acq_epoch = image.get("system:time_start")
+        return points.map(lambda f: f.set("acq_millis", acq_epoch))
 
     fire_points = collection.map(image_to_points).flatten()
 
-    # ── Correct band names for this collection ────────────────────────────────
-    fire_points = fire_points.select(["MaxFRP", "confidence", "acq_millis"])
+    # ── Correct band names from the catalog ───────────────────────────────────
+    fire_points = fire_points.select(
+        ["Bright_ti4", "Bright_ti5", "frp", "confidence", "DayNight", "acq_millis"]
+    )
 
     geojson = fire_points.getInfo()
 
@@ -77,7 +80,13 @@ def query_viirs(
             props["acq_datetime"] = datetime.fromtimestamp(
                 millis / 1000, tz=timezone.utc
             ).isoformat()
-        props["frp"] = props.pop("MaxFRP", None)
+        # Rename to friendlier keys
+        props["brightness_ti4"] = props.pop("Bright_ti4", None)
+        props["brightness_ti5"] = props.pop("Bright_ti5", None)
+        props["day_night"] = "day" if props.pop("DayNight", 1) == 1 else "night"
+        conf_map = {0: "low", 1: "nominal", 2: "high"}
+        props["confidence"] = conf_map.get(props.get("confidence"), "unknown")
+
         coords = feat.get("geometry", {}).get("coordinates", [])
         if coords:
             feat["geometry"]["coordinates"] = [round(c, 5) for c in coords]
