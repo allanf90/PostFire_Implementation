@@ -1,6 +1,3 @@
-# .github/workflows/deploy.yml
-# Builds the Docker image and deploys to Google Cloud Run on every push to main.
-
 name: Deploy to Cloud Run
 
 on:
@@ -10,9 +7,9 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: africa-south1           # Johannesburg – closest to Kenya
+  REGION: africa-south1
   SERVICE: aberdare-fire-api
-  IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/aberdare-fire-api
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
@@ -20,33 +17,19 @@ jobs:
     environment: deployment
 
     steps:
-      # 1. Checkout code
       - uses: actions/checkout@v4
 
-      # 2. Authenticate to Google Cloud
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 3. Set up gcloud CLI
       - uses: google-github-actions/setup-gcloud@v2
 
-      # 4. Configure Docker to push to GCR
-      - run: gcloud auth configure-docker --quiet
-
-      # 5. Build & push image
-      - name: Build and push Docker image
-        run: |
-          docker build -t $IMAGE:$GITHUB_SHA -t $IMAGE:latest .
-          docker push $IMAGE:$GITHUB_SHA
-          docker push $IMAGE:latest
-
-      # 6. Deploy to Cloud Run
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run (from source)
         run: |
           gcloud run deploy $SERVICE \
-            --image $IMAGE:$GITHUB_SHA \
+            --source . \
             --platform managed \
             --region $REGION \
             --allow-unauthenticated \
@@ -58,7 +41,6 @@ jobs:
             --set-env-vars "GEE_SERVICE_ACCOUNT=${{ secrets.GEE_SERVICE_ACCOUNT }}" \
             --set-env-vars "GEE_KEY_JSON=${{ secrets.GEE_KEY_JSON }}"
 
-      # 7. Print the live URL
       - name: Get service URL
         run: |
           gcloud run services describe $SERVICE \
