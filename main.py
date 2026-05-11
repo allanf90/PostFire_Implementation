@@ -109,3 +109,65 @@ def root():
         "docs": "/docs",
         "endpoints": ["/fire/latest", "/fire/history", "/fire/boundary", "/health"],
     }
+
+@app.get("/fire/debug")
+def fire_debug():
+    """
+    Diagnostic endpoint — shows env var status, raw FIRMS API response,
+    and GEE collection size. Never expose in production.
+    """
+    import os, httpx
+
+    firms_key = os.environ.get("FIRMS_API_KEY", "")
+    gee_account = os.environ.get("GEE_SERVICE_ACCOUNT", "")
+
+    result = {
+        "env": {
+            "FIRMS_API_KEY_set": bool(firms_key),
+            "FIRMS_API_KEY_length": len(firms_key),
+            "GEE_SERVICE_ACCOUNT": gee_account,
+        },
+        "firms_api": None,
+        "gee_modis": None,
+    }
+
+    # ── Test FIRMS API raw ────────────────────────────────────────────────────
+    if firms_key:
+        try:
+            url = (
+                f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/"
+                f"{firms_key}/VIIRS_SNPP_NRT/36.55,-0.70,37.05,-0.10/7"
+            )
+            resp = httpx.get(url, timeout=30)
+            result["firms_api"] = {
+                "status_code": resp.status_code,
+                "raw_first_500_chars": resp.text[:500],
+                "line_count": len(resp.text.strip().split("\n")),
+            }
+        except Exception as e:
+            result["firms_api"] = {"error": str(e)}
+    else:
+        result["firms_api"] = {"error": "FIRMS_API_KEY not set in environment"}
+
+    # ── Test GEE MODIS collection size ────────────────────────────────────────
+    try:
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+        end = now.strftime("%Y-%m-%dT%H:%M:%S")
+        aoi = ee.Geometry.Polygon([[
+            [36.55, -0.70], [37.05, -0.70],
+            [37.05, -0.10], [36.55, -0.10], [36.55, -0.70]
+        ]])
+        count = (
+            ee.ImageCollection("FIRMS")
+            .filterDate(start, end)
+            .filterBounds(aoi)
+            .size()
+            .getInfo()
+        )
+        result["gee_modis"] = {"image_count_last_7_days": count}
+    except Exception as e:
+        result["gee_modis"] = {"error": str(e)}
+
+    return JSONResponse(content=result)
