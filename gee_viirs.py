@@ -45,7 +45,7 @@ def query_viirs(
     end     = now_utc.strftime("%Y-%m-%dT%H:%M:%S")
 
     collection = (
-        ee.ImageCollection("FIRMS/VIIRS_SNPP_C2")
+        ee.ImageCollection("FIRMS/VIIRS_SNPP_NRT")
         .filterDate(start, end)
         .filterBounds(aoi)
     )
@@ -64,7 +64,7 @@ def query_viirs(
 
     fire_points = collection.map(image_to_points).flatten()
     fire_points = fire_points.select(
-        ["brightness", "frp", "confidence", "acq_millis"]
+        ["T21", "FRP", "confidence"]
     )
 
     geojson = fire_points.getInfo()
@@ -77,6 +77,9 @@ def query_viirs(
             props["acq_datetime"] = datetime.fromtimestamp(
                 millis / 1000, tz=timezone.utc
             ).isoformat()
+        # Rename to friendlier keys
+        props["brightness"] = props.pop("T21", None)
+        props["frp"] = props.pop("FRP", None)
         coords = feat.get("geometry", {}).get("coordinates", [])
         if coords:
             feat["geometry"]["coordinates"] = [round(c, 5) for c in coords]
