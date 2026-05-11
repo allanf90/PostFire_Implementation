@@ -36,16 +36,16 @@ def query_viirs(
     min_confidence: int = 50,
     aoi: Optional[ee.Geometry] = None,
 ) -> dict:
-    """Query VIIRS SNPP Collection-2 active fire pixels."""
     if aoi is None:
-        aoi = get_aoi()   # ← created here, after GEE is initialized
+        aoi = get_aoi()
 
     now_utc = datetime.now(timezone.utc)
     start   = (now_utc - timedelta(hours=hours_back)).strftime("%Y-%m-%dT%H:%M:%S")
     end     = now_utc.strftime("%Y-%m-%dT%H:%M:%S")
 
+    # ── Correct dataset ID ────────────────────────────────────────────────────
     collection = (
-        ee.ImageCollection("FIRMS/VIIRS_SNPP_NRT")
+        ee.ImageCollection("NASA_LANCE_SNPP_VIIRS_C2")
         .filterDate(start, end)
         .filterBounds(aoi)
     )
@@ -63,9 +63,9 @@ def query_viirs(
         return points.map(lambda f: f.set("acq_millis", acq_time))
 
     fire_points = collection.map(image_to_points).flatten()
-    fire_points = fire_points.select(
-        ["T21", "FRP", "confidence"]
-    )
+
+    # ── Correct band names for this collection ────────────────────────────────
+    fire_points = fire_points.select(["MaxFRP", "confidence", "acq_millis"])
 
     geojson = fire_points.getInfo()
 
@@ -77,9 +77,7 @@ def query_viirs(
             props["acq_datetime"] = datetime.fromtimestamp(
                 millis / 1000, tz=timezone.utc
             ).isoformat()
-        # Rename to friendlier keys
-        props["brightness"] = props.pop("T21", None)
-        props["frp"] = props.pop("FRP", None)
+        props["frp"] = props.pop("MaxFRP", None)
         coords = feat.get("geometry", {}).get("coordinates", [])
         if coords:
             feat["geometry"]["coordinates"] = [round(c, 5) for c in coords]
