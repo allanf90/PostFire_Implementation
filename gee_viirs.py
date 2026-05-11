@@ -43,6 +43,8 @@ def query_firms_api(days_back: int = 1) -> dict:
     api_key = os.environ.get("FIRMS_API_KEY", "")
     if not api_key:
         return {"features": [], "source": "firms_api", "error": "No FIRMS_API_KEY set"}
+    
+    days_back = min(days_back, 5)
 
     # FIRMS area API: returns CSV of fire detections
     url = (

@@ -136,7 +136,7 @@ def fire_debug():
         try:
             url = (
                 f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/"
-                f"{firms_key}/VIIRS_SNPP_NRT/36.55,-0.70,37.05,-0.10/7"
+                f"{firms_key}/VIIRS_SNPP_NRT/36.55,-0.70,37.05,-0.10/5"
             )
             resp = httpx.get(url, timeout=30)
             result["firms_api"] = {
